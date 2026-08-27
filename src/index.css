@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    letter-spacing: -0.015em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  .font-gaegu {
+    font-family: "Pretendard Variable", Pretendard, "Noto Sans KR", sans-serif;
+  }
+}
+
+@keyframes deskPop {
+  0% { transform: scale(0.88); opacity: 0.6; }
+  60% { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.desk-pop {
+  animation: deskPop 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes secretGlow {
+  0%, 100% { opacity: 0.3; transform: scale(0.95); }
+  50% { opacity: 0.9; transform: scale(1.05); }
+}
+
+.secret-glow {
+  animation: secretGlow 1.5s infinite ease-in-out;
+}
+
+/* Print styles for classroom desk arrangement */
+@media print {
+  @page {
+    size: landscape;
+    margin: 10mm;
+  }
+  body {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    background: white !important;
+    padding: 0 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+}

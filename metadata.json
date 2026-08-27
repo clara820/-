@@ -1,0 +1,6 @@
+{
+  "name": "학급 자리바꾸기",
+  "description": "학급 특성 맞춤 조건(2인 3팀 섬 배치, 앞뒤 우호 지정)과 스페이스바 비밀 프리셋을 갖춘 스마트 학급 자리바꾸기 프로그램",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
