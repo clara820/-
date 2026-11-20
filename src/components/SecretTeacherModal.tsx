@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SecretSettings, Seat, Student } from '../types';
 import { ShieldAlert, Sparkles, Users, ArrowUpDown, Key, Check, Plus, Trash2, Eye, EyeOff, Info, Copy } from 'lucide-react';
 
@@ -9,7 +9,8 @@ interface SecretTeacherModalProps {
   onSaveSecretSettings: (updated: SecretSettings) => void;
   currentSeats: Seat[];
   students: Student[];
-  onApplyPresetNow: () => void;
+  onApplyPresetNow: (updated: SecretSettings) => void;
+  onApplyIslandNow: (updated: SecretSettings) => void;
 }
 
 export const SecretTeacherModal: React.FC<SecretTeacherModalProps> = ({
@@ -20,12 +21,28 @@ export const SecretTeacherModal: React.FC<SecretTeacherModalProps> = ({
   currentSeats,
   students,
   onApplyPresetNow,
+  onApplyIslandNow,
 }) => {
   const [settings, setSettings] = useState<SecretSettings>(secretSettings);
   const [activeTab, setActiveTab] = useState<'spacebar' | 'island' | 'vertical' | 'avoid'>('spacebar');
   const [copiedNotification, setCopiedNotification] = useState(false);
   const [quickSeatStudentName, setQuickSeatStudentName] = useState('');
   const [newAvoidMemberInput, setNewAvoidMemberInput] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setSettings({
+        ...secretSettings,
+        islandGroup: {
+          ...secretSettings.islandGroup,
+          effectsTriggerOnly:
+            secretSettings.islandGroup?.effectsTriggerOnly ??
+            secretSettings.islandGroup?.ctrlTriggerOnly ??
+            true,
+        },
+      });
+    }
+  }, [isOpen, secretSettings]);
 
   if (!isOpen) return null;
 
@@ -179,7 +196,7 @@ export const SecretTeacherModal: React.FC<SecretTeacherModalProps> = ({
                 🔒 선생님 비밀 관제실 (Secret Room)
               </h2>
               <p className="text-xs text-pink-100 font-sans">
-                아이들에게는 절대 노출되지 않는 비밀 조건 및 스페이스바 연출 세팅
+                아이들에게는 절대 노출되지 않는 비밀 조건 및 비밀 발동(Spacebar · 효과넣기) 세팅
               </p>
             </div>
           </div>
@@ -396,7 +413,7 @@ export const SecretTeacherModal: React.FC<SecretTeacherModalProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    onApplyPresetNow();
+                    onApplyPresetNow(settings);
                     onClose();
                   }}
                   className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold border border-rose-200 transition-colors"
@@ -410,60 +427,104 @@ export const SecretTeacherModal: React.FC<SecretTeacherModalProps> = ({
           {/* TAB 2: ISLAND 3-TEAM SEPARATION */}
           {activeTab === 'island' && (
             <div className="space-y-4">
-              <div className="p-4 bg-purple-50 rounded-2xl border border-purple-200">
+              <div className="p-4 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-2xl border border-purple-200 space-y-2.5">
                 <div className="flex items-start gap-3">
                   <span className="text-2xl">🏝️</span>
                   <div>
-                    <h3 className="font-bold text-slate-800 text-base">여학생 6인 (2인 3팀) 섬(Island) 분산 배치</h3>
+                    <h3 className="font-bold text-slate-800 text-base">
+                      여학생 6인 (2인 3팀) 섬(Island) 분산 배치 — [효과넣기] 비밀 발동
+                    </h3>
                     <p className="text-xs text-slate-600 mt-1 leading-relaxed">
                       쿠폰으로 짝꿍을 맺은 6명의 여학생(2명씩 3쌍)을 각자 짝꿍끼리는 앉히되,
-                      <strong className="text-purple-700"> 3팀이 서로 앞뒤/상하좌우로 절대 닿지 않도록 고립된 3개의 섬 형태로 분산 배치</strong>합니다.
+                      <strong className="text-purple-700"> 3팀이 서로 앞뒤·상하좌우·대각선은 물론 옆분단 바로 옆줄(통로 건너편)에도 절대 닿지 않도록 고립된 3개의 섬 형태로 분산 배치</strong>합니다.
                     </p>
                   </div>
                 </div>
+
+                <div className="p-3 bg-white/80 rounded-xl border border-purple-200/80 flex items-start gap-2.5">
+                  <span className="text-lg">✨</span>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    <strong className="text-indigo-700">비밀 발동 원리:</strong> 하단의{' '}
+                    <strong className="text-pink-600">[✨ 효과넣기] 버튼이 비밀 스위치</strong> 역할을 합니다!
+                    평소 테스트할 때 <strong className="text-slate-800">[효과넣기]를 끈 상태</strong>로 돌리면 아무도 모르게 완전 일반 랜덤으로 작동하고,
+                    마지막 진짜 배치 때 <strong className="text-purple-700">[효과넣기]를 켜고 [자리 바꾸기]를 클릭</strong>하면 별도 키 조작 없이 카운트다운·폭죽 연출과 함께 2인 3팀 섬 분산이 자동으로 비밀 발동됩니다!
+                  </p>
+                </div>
               </div>
 
-              <div className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-xl">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="enable-island-rule"
-                    checked={settings.islandGroup.enabled}
-                    onChange={(e) =>
-                      setSettings({
-                        ...settings,
-                        islandGroup: {
-                          ...settings.islandGroup,
-                          enabled: e.target.checked,
-                        },
-                      })
-                    }
-                    className="w-4 h-4 text-purple-600 rounded-sm focus:ring-purple-500"
-                  />
-                  <label htmlFor="enable-island-rule" className="text-sm font-bold text-gray-700 cursor-pointer">
-                    2인 3팀 섬(Island) 분산 규칙 활성화
-                  </label>
+              <div className="p-3.5 bg-white border border-gray-200 rounded-xl space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="enable-island-rule"
+                      checked={settings.islandGroup.enabled}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          islandGroup: {
+                            ...settings.islandGroup,
+                            enabled: e.target.checked,
+                          },
+                        })
+                      }
+                      className="w-4 h-4 text-purple-600 rounded-sm focus:ring-purple-500"
+                    />
+                    <label htmlFor="enable-island-rule" className="text-sm font-bold text-gray-700 cursor-pointer">
+                      2인 3팀 섬(Island) 분산 규칙 활성화
+                    </label>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="enforce-island-dist"
+                      checked={settings.islandGroup.enforceIslandSeparation}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          islandGroup: {
+                            ...settings.islandGroup,
+                            enforceIslandSeparation: e.target.checked,
+                          },
+                        })
+                      }
+                      className="w-4 h-4 text-purple-600 rounded-sm focus:ring-purple-500"
+                    />
+                    <label htmlFor="enforce-island-dist" className="text-xs text-gray-600 cursor-pointer">
+                      앞뒤/옆분단 바로 옆 완전 분리 강제
+                    </label>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="enforce-island-dist"
-                    checked={settings.islandGroup.enforceIslandSeparation}
-                    onChange={(e) =>
-                      setSettings({
-                        ...settings,
-                        islandGroup: {
-                          ...settings.islandGroup,
-                          enforceIslandSeparation: e.target.checked,
-                        },
-                      })
-                    }
-                    className="w-4 h-4 text-purple-600 rounded-sm focus:ring-purple-500"
-                  />
-                  <label htmlFor="enforce-island-dist" className="text-xs text-gray-600 cursor-pointer">
-                    앞뒤/상하좌우 완전 분리 강제
-                  </label>
+                <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="enable-island-effects-only"
+                      checked={
+                        (settings.islandGroup.effectsTriggerOnly ??
+                          settings.islandGroup.ctrlTriggerOnly) !== false
+                      }
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          islandGroup: {
+                            ...settings.islandGroup,
+                            effectsTriggerOnly: e.target.checked,
+                            ctrlTriggerOnly: e.target.checked,
+                          },
+                        })
+                      }
+                      className="w-4 h-4 text-pink-600 rounded-sm focus:ring-pink-500"
+                    />
+                    <label htmlFor="enable-island-effects-only" className="text-xs sm:text-sm font-bold text-pink-700 cursor-pointer">
+                      [효과넣기] 켜짐 시에만 비밀 발동 (효과 꺼짐 테스트 시 미적용)
+                    </label>
+                  </div>
+                  <span className="px-2 py-0.5 bg-pink-100 text-pink-700 rounded-md text-[11px] font-bold whitespace-nowrap">
+                    ✨ 효과넣기 = 비밀 버튼
+                  </span>
                 </div>
               </div>
 
@@ -484,7 +545,7 @@ export const SecretTeacherModal: React.FC<SecretTeacherModalProps> = ({
                       value={pair[0]}
                       placeholder="학생 1"
                       onChange={(e) => updateIslandPair(idx, 0, e.target.value)}
-                      className="flex-1 px-3 py-1.5 border border-gray-200 rounded-xl text-center text-sm font-gaegu font-bold focus:border-purple-400 outline-none"
+                      className="flex-1 px-3 py-1.5 border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-purple-400 outline-none"
                     />
                     <span className="text-purple-400 font-bold text-xs">↔ 짝꿍 ↔</span>
                     <input
@@ -493,7 +554,7 @@ export const SecretTeacherModal: React.FC<SecretTeacherModalProps> = ({
                       value={pair[1]}
                       placeholder="학생 2"
                       onChange={(e) => updateIslandPair(idx, 1, e.target.value)}
-                      className="flex-1 px-3 py-1.5 border border-gray-200 rounded-xl text-center text-sm font-gaegu font-bold focus:border-purple-400 outline-none"
+                      className="flex-1 px-3 py-1.5 border border-gray-200 rounded-xl text-center text-sm font-bold focus:border-purple-400 outline-none"
                     />
                     <button
                       type="button"
@@ -512,6 +573,19 @@ export const SecretTeacherModal: React.FC<SecretTeacherModalProps> = ({
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>2인 팀 추가하기</span>
+                </button>
+              </div>
+
+              <div className="flex justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onApplyIslandNow(settings);
+                    onClose();
+                  }}
+                  className="px-4 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-xs font-bold border border-purple-200 transition-colors"
+                >
+                  지금 즉시 섬 분산 배치 교실에 테스트하기
                 </button>
               </div>
             </div>

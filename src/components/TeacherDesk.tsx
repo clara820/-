@@ -4,6 +4,7 @@ import { Sparkles, KeyRound } from 'lucide-react';
 interface TeacherDeskProps {
   onOpenSecretModal: () => void;
   isSpacebarPressed: boolean;
+  isCtrlPressed?: boolean;
   classNameTitle?: string;
   isSecretModeReady?: boolean;
 }
@@ -11,6 +12,7 @@ interface TeacherDeskProps {
 export const TeacherDesk: React.FC<TeacherDeskProps> = ({
   onOpenSecretModal,
   isSpacebarPressed,
+  isCtrlPressed = false,
   classNameTitle = '🍎 교탁',
   isSecretModeReady = false,
 }) => {
@@ -58,18 +60,14 @@ export const TeacherDesk: React.FC<TeacherDeskProps> = ({
           </span>
           <span className="tracking-tight text-xl sm:text-2xl font-bold drop-shadow-xs">{classNameTitle}</span>
 
-          {/* Discreet Teacher Indicator (Spacebar Ready or Triple-click Hint) */}
-          <div className="absolute right-3 top-2.5 flex items-center gap-1">
+          {/* Ultra-discreet Teacher Indicator (no revealing tooltips for students) */}
+          <div className="absolute right-3 top-2.5 flex items-center gap-1 pointer-events-none">
             {isSpacebarPressed ? (
-              <span
-                title="스페이스바 비밀 모드 활성화됨"
-                className="w-2.5 h-2.5 rounded-full bg-emerald-300 ring-2 ring-white animate-ping"
-              />
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-300 ring-2 ring-white animate-ping" />
+            ) : isCtrlPressed ? (
+              <span className="w-1.5 h-1.5 rounded-full bg-white/80" />
             ) : isSecretModeReady ? (
-              <span
-                title="선생님 비밀 세팅 탑재됨"
-                className="w-2 h-2 rounded-full bg-pink-200 opacity-60"
-              />
+              <span className="w-2 h-2 rounded-full bg-pink-200 opacity-50" />
             ) : null}
           </div>
         </button>

@@ -51,6 +51,10 @@ export interface IslandGroupRule {
   enabled: boolean;
   // Prevent any pair from being adjacent (vertically, horizontally, or diagonally) to other pairs
   enforceIslandSeparation: boolean;
+  // When true (default), only activates when '효과넣기' (useEffects) is turned ON (or Ctrl+click)
+  effectsTriggerOnly?: boolean;
+  // Legacy fallback flag for previously saved localStorage data
+  ctrlTriggerOnly?: boolean;
 }
 
 export interface SecretSettings {

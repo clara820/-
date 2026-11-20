@@ -98,6 +98,7 @@ export const INITIAL_SECRET_SETTINGS: SecretSettings = {
     ],
     enabled: true,
     enforceIslandSeparation: true,
+    effectsTriggerOnly: true,
   },
   verticalAffinity: {
     id: 'vert-doyun',
@@ -115,7 +116,7 @@ export const INITIAL_SECRET_SETTINGS: SecretSettings = {
 export const INITIAL_CONFIG: ClassroomConfig = {
   maxRows: 6,
   maxCols: 10,
-  useEffects: true,
+  useEffects: false,
   useSound: true,
   revealStyle: 'all_at_once',
   countdownSeconds: 3,

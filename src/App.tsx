@@ -15,7 +15,7 @@ import {
   INITIAL_SECRET_SETTINGS,
   INITIAL_CONFIG,
 } from './data/defaultData';
-import { solveSeatingArrangement } from './utils/seatingSolver';
+import { solveSeatingArrangement, SecretTriggerOptions } from './utils/seatingSolver';
 import { soundManager, fireClassroomConfetti } from './utils/soundEffects';
 import { TeacherDesk } from './components/TeacherDesk';
 import { ClassroomGrid } from './components/ClassroomGrid';
@@ -86,7 +86,20 @@ export default function App() {
   const [secretSettings, setSecretSettings] = useState<SecretSettings>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.SECRET_SETTINGS);
-      return saved ? JSON.parse(saved) : INITIAL_SECRET_SETTINGS;
+      if (!saved) return INITIAL_SECRET_SETTINGS;
+      const parsed = JSON.parse(saved);
+      return {
+        ...INITIAL_SECRET_SETTINGS,
+        ...parsed,
+        islandGroup: {
+          ...INITIAL_SECRET_SETTINGS.islandGroup,
+          ...(parsed.islandGroup || {}),
+          effectsTriggerOnly:
+            parsed.islandGroup?.effectsTriggerOnly ??
+            parsed.islandGroup?.ctrlTriggerOnly ??
+            true,
+        },
+      };
     } catch {
       return INITIAL_SECRET_SETTINGS;
     }
@@ -109,9 +122,13 @@ export default function App() {
   const [isShufflingAnimation, setIsShufflingAnimation] = useState(false);
   const [highlightedSeatIds, setHighlightedSeatIds] = useState<number[]>([]);
 
-  // Spacebar secret tracker
+  // Secret key trackers (Spacebar = preset layout, Ctrl = 2-person 3-team island dispersal)
   const [isSpacebarPressed, setIsSpacebarPressed] = useState(false);
   const spacebarRef = useRef(false);
+  const [isCtrlPressed, setIsCtrlPressed] = useState(false);
+  const ctrlRef = useRef(false);
+  // Capture trigger keys at shuffle button click time so releasing during countdown still works
+  const pendingTriggerRef = useRef<SecretTriggerOptions>({});
 
   // Toast notification state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'warn' | 'info' } | null>(null);
@@ -143,7 +160,7 @@ export default function App() {
     saveStateToStorage();
   }, [saveStateToStorage]);
 
-  // --- Keyboard Event Listeners for Spacebar Secret Rigging & Shortcuts ---
+  // --- Keyboard Event Listeners for Spacebar / Ctrl Secret Rigging & Shortcuts ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Avoid capturing spacebar when user is typing in an input
@@ -154,6 +171,11 @@ export default function App() {
         // Spacebar held down
         setIsSpacebarPressed(true);
         spacebarRef.current = true;
+      }
+
+      if (e.key === 'Control' || e.ctrlKey) {
+        setIsCtrlPressed(true);
+        ctrlRef.current = true;
       }
 
       // Teacher secret shortcut: Ctrl+Alt+S or Shift+Alt+S
@@ -168,20 +190,45 @@ export default function App() {
         setIsSpacebarPressed(false);
         spacebarRef.current = false;
       }
+      if (e.key === 'Control' || !e.ctrlKey) {
+        if (e.key === 'Control') {
+          setIsCtrlPressed(false);
+          ctrlRef.current = false;
+        }
+      }
+    };
+
+    const handleWindowBlur = () => {
+      setIsSpacebarPressed(false);
+      spacebarRef.current = false;
+      setIsCtrlPressed(false);
+      ctrlRef.current = false;
     };
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleWindowBlur);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleWindowBlur);
     };
   }, []);
 
   // --- Core Shuffle Action ---
-  const executeShuffle = (forceSecret = false) => {
-    const isSecretTriggered = forceSecret || spacebarRef.current || isSpacebarPressed;
+  const executeShuffle = (
+    triggerOverride?: SecretTriggerOptions,
+    settingsOverride?: SecretSettings
+  ) => {
+    const activeSecretSettings = settingsOverride ?? secretSettings;
+    const triggerOptions: SecretTriggerOptions = {
+      spacebar: triggerOverride?.spacebar ?? (spacebarRef.current || isSpacebarPressed),
+      effectsOn: triggerOverride?.effectsOn ?? config.useEffects,
+      ctrl: triggerOverride?.ctrl ?? (ctrlRef.current || isCtrlPressed),
+      forcePreset: triggerOverride?.forcePreset ?? false,
+      forceIsland: triggerOverride?.forceIsland ?? false,
+    };
 
     // Available student names (active students, filtered or padded)
     const activeStudentNames = students
@@ -202,8 +249,8 @@ export default function App() {
       candidatePool,
       nearRules,
       avoidRules,
-      secretSettings,
-      isSecretTriggered
+      activeSecretSettings,
+      triggerOptions
     );
 
     // Apply new assignments to seats
@@ -240,13 +287,20 @@ export default function App() {
     }
   };
 
-  const handleStartShuffle = () => {
-    if (isEditMode) return;
+  const handleStartShuffle = (e?: React.MouseEvent) => {
+    if (isEditMode || isShufflingAnimation) return;
+
+    const capturedTrigger: SecretTriggerOptions = {
+      spacebar: spacebarRef.current || isSpacebarPressed,
+      effectsOn: config.useEffects,
+      ctrl: Boolean(e?.ctrlKey) || ctrlRef.current || isCtrlPressed,
+    };
 
     if (config.useEffects) {
+      pendingTriggerRef.current = capturedTrigger;
       setIsShufflingAnimation(true);
     } else {
-      executeShuffle();
+      executeShuffle(capturedTrigger);
     }
   };
 
@@ -311,20 +365,25 @@ export default function App() {
   return (
     <div
       id="classroom-app-root"
-      className="min-h-screen w-full flex flex-col justify-between p-2 sm:p-4 md:p-6 overflow-x-hidden selection:bg-pink-200"
+      className="min-h-screen w-full flex flex-col justify-between p-2 sm:p-4 md:p-6 overflow-x-hidden selection:bg-pink-200 print:min-h-0 print:p-0 print:block print:bg-white"
     >
       {/* Top Teacher Desk Section */}
       <header className="no-print">
         <TeacherDesk
           onOpenSecretModal={() => setIsSecretModalOpen(true)}
           isSpacebarPressed={isSpacebarPressed}
+          isCtrlPressed={isCtrlPressed}
           classNameTitle={config.className}
           isSecretModeReady={secretSettings.enabled && Object.keys(secretSettings.presetLayout || {}).length > 0}
         />
       </header>
 
       {/* Center Classroom Grid */}
-      <main className="flex-1 flex items-center justify-center my-1 sm:my-2 w-full">
+      <main
+        className={`flex-1 flex items-center justify-center my-1 sm:my-2 w-full ${
+          isPrintModalOpen ? 'no-print' : ''
+        }`}
+      >
         <ClassroomGrid
           seats={seats}
           students={students}
@@ -410,8 +469,15 @@ export default function App() {
             <button
               type="button"
               id="main-shuffle-btn"
-              onClick={handleStartShuffle}
-              className="flex-1 max-w-sm sm:max-w-md py-3.5 sm:py-4 px-6 rounded-2xl bg-gradient-to-r from-pink-400 via-purple-400 to-indigo-400 hover:from-pink-500 hover:via-purple-500 hover:to-indigo-500 text-white font-gaegu text-2xl sm:text-3xl font-bold tracking-wider shadow-lg shadow-pink-200 hover:shadow-xl hover:shadow-purple-200 border-2 border-pink-200 transition-all duration-200 active:scale-95 flex items-center justify-center gap-2"
+              onClick={(e) => handleStartShuffle(e)}
+              onContextMenu={(e) => {
+                // On macOS, Control+Click fires contextmenu instead of click
+                if (e.ctrlKey || ctrlRef.current) {
+                  e.preventDefault();
+                  handleStartShuffle(e);
+                }
+              }}
+              className="flex-1 max-w-sm sm:max-w-md py-3.5 sm:py-4 px-6 rounded-2xl bg-gradient-to-r from-pink-400 via-purple-400 to-indigo-400 hover:from-pink-500 hover:via-purple-500 hover:to-indigo-500 text-white text-2xl sm:text-3xl font-bold tracking-wider shadow-lg shadow-pink-200 hover:shadow-xl hover:shadow-purple-200 border-2 border-pink-200 transition-all duration-200 active:scale-95 flex items-center justify-center gap-2"
             >
               <RefreshCw className="w-6 h-6 animate-pulse" />
               <span>🔄 자리 바꾸기</span>
@@ -459,7 +525,7 @@ export default function App() {
       {toast && (
         <div
           id="toast-notification"
-          className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-full text-sm font-bold shadow-2xl flex items-center gap-2 select-none animate-bounce-short transition-all ${
+          className={`no-print fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-full text-sm font-bold shadow-2xl flex items-center gap-2 select-none animate-bounce-short transition-all ${
             toast.type === 'success'
               ? 'bg-slate-900 text-emerald-300 border border-emerald-500/40'
               : toast.type === 'warn'
@@ -505,8 +571,13 @@ export default function App() {
         }}
         currentSeats={seats}
         students={students}
-        onApplyPresetNow={() => {
-          executeShuffle(true);
+        onApplyPresetNow={(updated) => {
+          setSecretSettings(updated);
+          executeShuffle({ forcePreset: true }, updated);
+        }}
+        onApplyIslandNow={(updated) => {
+          setSecretSettings(updated);
+          executeShuffle({ forceIsland: true }, updated);
         }}
       />
 
@@ -515,8 +586,14 @@ export default function App() {
         countdownSeconds={config.countdownSeconds}
         useSound={config.useSound}
         onFinish={() => {
+          const finalTrigger: SecretTriggerOptions = {
+            spacebar: Boolean(pendingTriggerRef.current.spacebar || spacebarRef.current),
+            effectsOn: pendingTriggerRef.current.effectsOn ?? config.useEffects,
+            ctrl: Boolean(pendingTriggerRef.current.ctrl || ctrlRef.current),
+          };
+          pendingTriggerRef.current = {};
           setIsShufflingAnimation(false);
-          executeShuffle();
+          executeShuffle(finalTrigger);
         }}
       />
 

@@ -16,6 +16,42 @@ function getManhattanDistance(s1: Seat, s2: Seat): number {
   return Math.abs(s1.r - s2.r) + Math.abs(s1.c - s2.c);
 }
 
+/**
+ * Check whether two seats from different island pairs are forbidden neighbors:
+ * 1) Directly adjacent in any of 8 directions (front, back, left, right, diagonal: dr <= 1 && dc <= 1)
+ * 2) Same row across an aisle in an adjacent section (옆분단 바로 옆):
+ *    dr === 0 and either dc <= 2 OR there is no other seat sitting between them on that row
+ */
+function isIslandSeatForbiddenNeighbor(s1: Seat, s2: Seat, allSeats: Seat[]): boolean {
+  const dr = Math.abs(s1.r - s2.r);
+  const dc = Math.abs(s1.c - s2.c);
+
+  // Same section / 8-direction touching (앞뒤, 좌우, 대각선)
+  if (dr <= 1 && dc <= 1) return true;
+
+  // Same row in neighboring section (옆줄 / 옆분단 바로 옆)
+  if (dr === 0) {
+    if (dc <= 2) return true;
+    const minC = Math.min(s1.c, s2.c);
+    const maxC = Math.max(s1.c, s2.c);
+    const hasSeatBetween = allSeats.some(
+      (s) => s.r === s1.r && s.c > minC && s.c < maxC
+    );
+    if (!hasSeatBetween) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Stricter check that also avoids diagonal-across-aisle placement (dr === 1 && dc <= 2)
+ */
+function isIslandSeatDiagonalAcrossAisle(s1: Seat, s2: Seat): boolean {
+  const dr = Math.abs(s1.r - s2.r);
+  const dc = Math.abs(s1.c - s2.c);
+  return dr === 1 && dc <= 2;
+}
+
 export function getDynamicPairSlots(seats: Seat[]): [number, number][] {
   const pairs: [number, number][] = [];
   const paired = new Set<number>();
@@ -60,19 +96,40 @@ function shuffleArray<T>(array: T[]): T[] {
   return arr;
 }
 
+export interface SecretTriggerOptions {
+  spacebar?: boolean;
+  effectsOn?: boolean;
+  ctrl?: boolean;
+  forcePreset?: boolean;
+  forceIsland?: boolean;
+}
+
 export function solveSeatingArrangement(
   seats: Seat[],
   availableStudents: string[],
   nearRules: NearRule[],
   avoidRules: AvoidRule[],
   secretSettings: SecretSettings,
-  isSecretTriggered: boolean
+  secretTrigger: boolean | SecretTriggerOptions = false
 ): SolverResult {
+  const triggerOpts: SecretTriggerOptions =
+    typeof secretTrigger === 'boolean'
+      ? { spacebar: secretTrigger }
+      : secretTrigger;
+
+  const isPresetTriggered = Boolean(
+    triggerOpts.forcePreset ||
+      (triggerOpts.spacebar && secretSettings.spacebarTriggerEnabled)
+  );
+  const isIslandKeyTriggered = Boolean(
+    triggerOpts.forceIsland || triggerOpts.effectsOn || triggerOpts.ctrl
+  );
+
   const seatMap = new Map<number, Seat>();
   seats.forEach((s) => seatMap.set(s.id, s));
 
   // 1. If Secret Spacebar Mode is explicitly triggered, check for preset layout
-  if (isSecretTriggered && secretSettings.enabled && secretSettings.presetLayout) {
+  if (isPresetTriggered && secretSettings.enabled && secretSettings.presetLayout) {
     const preset = secretSettings.presetLayout;
     const assignments: Record<number, string> = {};
     let presetMatchCount = 0;
@@ -135,7 +192,15 @@ export function solveSeatingArrangement(
   );
 
   const islandGroup = secretSettings.islandGroup;
-  const isIslandActive = secretSettings.enabled && islandGroup && islandGroup.enabled && islandGroup.pairs.length > 0;
+  const requiresSecretTriggerForIsland =
+    (islandGroup?.effectsTriggerOnly ?? islandGroup?.ctrlTriggerOnly) !== false;
+  const isIslandActive = Boolean(
+    secretSettings.enabled &&
+      islandGroup &&
+      islandGroup.enabled &&
+      islandGroup.pairs.length > 0 &&
+      (!requiresSecretTriggerForIsland || isIslandKeyTriggered)
+  );
 
   const vertAffinity = secretSettings.verticalAffinity;
   const isVertActive = secretSettings.enabled && vertAffinity && vertAffinity.enabled && vertAffinity.targetStudent.trim() !== '';
@@ -170,23 +235,38 @@ export function solveSeatingArrangement(
         if (!remStudentNames.includes(p1) || !remStudentNames.includes(p2)) continue;
 
         // Filter slots that are isolated from previously placed island pairs
-        const candidateSlots = availableSlots.filter(([idA, idB]) => {
+        const validSlots = availableSlots.filter(([idA, idB]) => {
           const sA = seatMap.get(idA)!;
           const sB = seatMap.get(idB)!;
 
           if (!islandGroup.enforceIslandSeparation) return true;
 
-          // Must not be adjacent (dr <= 1 && dc <= 1) to any desk in previously placed pairs
+          // Hard rule: must not be adjacent (8-direction) OR adjacent across aisle on the same row (옆분단 바로 옆)
           for (const [prevA, prevB] of placedIslandPairSlots) {
-            if (getChebyshevDistance(sA, prevA) <= 1) return false;
-            if (getChebyshevDistance(sA, prevB) <= 1) return false;
-            if (getChebyshevDistance(sB, prevA) <= 1) return false;
-            if (getChebyshevDistance(sB, prevB) <= 1) return false;
-            // Also avoid directly front/behind (same col, row difference = 1)
-            if (Math.abs(sA.r - prevA.r) === 1 && Math.abs(sA.c - prevA.c) <= 1) return false;
+            if (isIslandSeatForbiddenNeighbor(sA, prevA, seats)) return false;
+            if (isIslandSeatForbiddenNeighbor(sA, prevB, seats)) return false;
+            if (isIslandSeatForbiddenNeighbor(sB, prevA, seats)) return false;
+            if (isIslandSeatForbiddenNeighbor(sB, prevB, seats)) return false;
           }
           return true;
         });
+
+        // Prefer slots that are also not diagonally adjacent across the aisle when available
+        const strictSlots = islandGroup.enforceIslandSeparation
+          ? validSlots.filter(([idA, idB]) => {
+              const sA = seatMap.get(idA)!;
+              const sB = seatMap.get(idB)!;
+              for (const [prevA, prevB] of placedIslandPairSlots) {
+                if (isIslandSeatDiagonalAcrossAisle(sA, prevA)) return false;
+                if (isIslandSeatDiagonalAcrossAisle(sA, prevB)) return false;
+                if (isIslandSeatDiagonalAcrossAisle(sB, prevA)) return false;
+                if (isIslandSeatDiagonalAcrossAisle(sB, prevB)) return false;
+              }
+              return true;
+            })
+          : validSlots;
+
+        const candidateSlots = strictSlots.length > 0 ? strictSlots : validSlots;
 
         if (candidateSlots.length === 0) {
           islandPlacedOk = false;
@@ -385,18 +465,21 @@ export function solveSeatingArrangement(
           const pA = pairSeats[i].seats;
           const pB = pairSeats[j].seats;
           let tooClose = false;
+          let diagonalAcrossAisle = false;
           for (const sA of pA) {
             for (const sB of pB) {
-              if (getChebyshevDistance(sA, sB) <= 1) {
+              if (isIslandSeatForbiddenNeighbor(sA, sB, seats)) {
                 tooClose = true;
+              } else if (isIslandSeatDiagonalAcrossAisle(sA, sB)) {
+                diagonalAcrossAisle = true;
               }
             }
           }
           if (tooClose) {
-            score -= 450;
-            conflicts.push(`[섬 분리 실패] 여학생 팀 간 인접`);
+            score -= 500;
+            conflicts.push(`[섬 분리 실패] 여학생 팀 간 인접 (앞뒤/옆분단)`);
           } else {
-            score += 80;
+            score += diagonalAcrossAisle ? 50 : 120;
           }
         }
       }
